@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import os
+from llmBasedAdvisory import generate_advisory
 
 load_dotenv()
 
@@ -41,51 +42,23 @@ def get_weather(city):
 
 
 
-# 2. FARMING ADVISORY LOGIC FUNCTION (HINDI)
+# 2. LOADING ML MODEL TO PREDICT RISKS
 
-def generate_advisory(temp, humidity, wind, condition):
-    advice = []
+import joblib
 
-    condition = condition.lower()
+model = joblib.load("risk_model.pkl")
 
-    # Rainy
-    if condition == "rain":
-        advice.append("आज बारिश की संभावना है। कीटनाशकों का छिड़काव न करें।")
-        advice.append("आज सिंचाई की आवश्यकता नहीं है।")
-        advice.append("खेत में जल निकासी की उचित व्यवस्था रखें।")
+# 3. PREDICTION FUNCTION
 
-    # High Temperature
-    if temp >= 35:
-        advice.append("तापमान अधिक है। सुबह या शाम के समय सिंचाई करें।")
-        advice.append("फसलों को गर्मी से बचाने के लिए मल्चिंग या छाया का उपयोग करें।")
+def predict_risks(temp, humidity, rainfall, wind):
+    input_data = [[temp, humidity, rainfall, wind]]
+    pred = model.predict(input_data)[0]
 
-    # High Humidity
-    if humidity >= 80:
-        advice.append("आर्द्रता अधिक है। फंगल रोगों का खतरा बढ़ सकता है।")
-        advice.append("पत्तियों पर धब्बे या फफूंदी के लक्षणों की निगरानी करें।")
+    labels = ["heat_stress", "low_moisture", "flood_risk", "fungal_risk", "cold_stress"]
 
-    # Windy
-    if wind >= 10:
-        advice.append("हवा की गति तेज है। कीटनाशकों का छिड़काव न करें।")
-        advice.append("कमजोर पौधों को सहारा दें ताकि वे गिर न जाएं।")
-
-    # Clear Weather
-    if condition == "clear":
-        advice.append("मौसम साफ है। खेती के अधिकांश कार्यों के लिए उपयुक्त समय है।")
-
-    # Cloudy
-    if condition == "clouds":
-        advice.append("मौसम बादलों से घिरा है। कीटों की गतिविधियों पर नजर रखें।")
-
-    # Default
-    if not advice:
-        advice.append("मौसम सामान्य है। नियमित खेती कार्य जारी रखें।")
-
-    return advice
+    return [labels[i] for i in range(len(labels)) if pred[i] == 1]
 
 
-
-# 3. COMBINED FUNCTION
 
 def get_weather_advisory(city):
     weather = get_weather(city)
@@ -93,24 +66,38 @@ def get_weather_advisory(city):
     if "error" in weather:
         return weather
 
-    temp = weather["temperature"]
-    humidity = weather["humidity"]
-    wind = weather["wind_speed"]
-    condition = weather["condition"]
+    rainfall = 0  
 
-    advisory = generate_advisory(temp, humidity, wind, condition)
+    risks = predict_risks(
+        weather["temperature"],
+        weather["humidity"],
+        rainfall,
+        weather["wind_speed"]
+    )
 
-    result = {
-        "city": city,
-        "temperature": temp,
-        "humidity": humidity,
-        "wind_speed": wind,
-        "condition": condition,
-        "advisory": advisory
+    # ✅ Prepare full weather data for LLM (including wind)
+    weather_for_llm = {
+        "temperature": weather["temperature"],
+        "humidity": weather["humidity"],
+        "rainfall": rainfall,
+        "wind_speed": weather["wind_speed"]
     }
 
-    return result
-
+    try:
+        advisory = generate_advisory(risks, weather_for_llm)
+    except Exception as e:
+        print("LLM Error:", e)
+        advisory = "मौसम के अनुसार सिंचाई और फसल की देखभाल करें।"
+    
+    print("WEATHER:", weather_for_llm)
+    print("RISKS:", risks)
+    print("ADVISORY:", advisory)
+    
+    return {
+        "weather": weather,
+        "risks": risks,
+        "advisory": advisory
+    }
 
 
 # 4. FLASK ROUTES
