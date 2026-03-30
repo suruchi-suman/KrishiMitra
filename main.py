@@ -1,10 +1,13 @@
 from dotenv import load_dotenv
 import os
-from openai import OpenAI
+import re
+
 load_dotenv()
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+from google import genai
 
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+gemini_model = "gemini-2.5-flash"
 
 import requests
 from flask import Flask, request, jsonify
@@ -14,16 +17,13 @@ from flask import Response
 app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 
-
 API_KEY = os.getenv("WEATHER_API_KEY")
 
-
 # FETCH WEATHER DATA FUNCTION
-
 def get_weather(city):
     try:
         url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={API_KEY}&units=metric"
-        
+
         response = requests.get(url)
         data = response.json()
 
@@ -43,76 +43,79 @@ def get_weather(city):
         return {"error": str(e)}
 
 
-
 # 2. LOADING ML MODEL TO PREDICT RISKS
-
 import joblib
 
-model = joblib.load("risk_model.pkl")
+risk_model = joblib.load("risk_model.pkl")
+
 
 # 3. PREDICTION FUNCTION
-
 def predict_risks(temp, humidity, rainfall, wind):
     input_data = [[temp, humidity, rainfall, wind]]
-    pred = model.predict(input_data)[0]
+    pred = risk_model.predict(input_data)[0]
 
     labels = ["heat_stress", "low_moisture", "flood_risk", "fungal_risk", "cold_stress"]
 
     return [labels[i] for i in range(len(labels)) if pred[i] == 1]
 
 
-def fallback_advisory(risks, weather):
-    if "low_moisture" in risks:
-        return "मिट्टी में नमी कम है, सिंचाई बढ़ाएं और मल्चिंग करें।"
-    if "heat_stress" in risks:
-        return "उच्च तापमान है, फसल को धूप से बचाएं और सिंचाई करें।"
-    if "fungal_risk" in risks:
-        return "आर्द्रता अधिक है, फफूंद से बचाव के लिए दवा का छिड़काव करें।"
-    return "मौसम सामान्य है, नियमित देखभाल करें।"
+# def fallback_advisory(risks, weather):
+#     if "low_moisture" in risks:
+#         return "मिट्टी में नमी कम है, सिंचाई बढ़ाएं और मल्चिंग करें।"
+#     if "heat_stress" in risks:
+#         return "उच्च तापमान है, फसल को धूप से बचाएं और सिंचाई करें।"
+#     if "fungal_risk" in risks:
+#         return "आर्द्रता अधिक है, फफूंद से बचाव के लिए दवा का छिड़काव करें।"
+#     return "मौसम सामान्य है, नियमित देखभाल करें।"
+
 
 def generate_advisory(risks, weather):
     try:
+        # Handle no risk case
         if not risks:
             return "मौसम सामान्य है, फसल की नियमित देखभाल करें।"
 
         risks_text = ", ".join(risks)
 
         prompt = f"""
-        आप एक अनुभवी कृषि विशेषज्ञ हैं।
+आप एक अनुभवी कृषि विशेषज्ञ हैं।
 
-        मौसम की स्थिति:
-        तापमान: {weather['temperature']}°C
-        आर्द्रता: {weather['humidity']}%
-        हवा की गति: {weather['wind_speed']} m/s
+मौसम:
+तापमान: {weather['temperature']}°C
+आर्द्रता: {weather['humidity']}%
+हवा की गति: {weather['wind_speed']} m/s
 
-        संभावित जोखिम:
-        {risks_text}
+जोखिम:
+{risks_text}
 
-        निर्देश:
-        - केवल 2-3 छोटे और स्पष्ट सुझाव दें
-        - भाषा सरल हिंदी हो
-        - सीधे किसान से बात करें
-        - फसल सुरक्षा और सिंचाई पर ध्यान दें
+निर्देश:
+- 2-3 छोटे और स्पष्ट सुझाव दें
+- सरल हिंदी में लिखें
+- किसान को सीधे सलाह दें
 
-        उत्तर:
-        """
+उत्तर:
+"""
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.7
+        response = client.models.generate_content(
+            model=gemini_model,
+            contents=prompt
         )
 
-        output = response.choices[0].message.content.strip()
+        output = response.text.strip()
+        output = re.sub(r"\*\*(.*?)\*\*", r"\1", output)
+        output = output.replace("\n", "<br>")
+        output = re.sub(r"\s+", " ", output).strip()
 
         if not output:
-            raise ValueError("Empty response from LLM")
+            raise ValueError("Empty Gemini response")
 
         return output
 
     except Exception as e:
-        print("LLM Error:", e)
-        return fallback_advisory(risks, weather)
+        print("Gemini Error:", e)
+        return f"LLM Error: {str(e)}"
+        # return fallback_advisory(risks, weather)
+
 
 # 5. GET WEATHER ADVISORY
 def get_weather_advisory(city):
@@ -122,7 +125,7 @@ def get_weather_advisory(city):
         return weather
 
     # NOTE: you don’t have rainfall in API → assume 0 for now
-    rainfall = 0  
+    rainfall = 0
 
     risks = predict_risks(
         weather["temperature"],
@@ -138,9 +141,9 @@ def get_weather_advisory(city):
         "risks": risks,
         "advisory": advisory
     }
+
+
 # 4. FLASK ROUTES
-
-
 @app.route('/')
 def home():
     return "KrishiMitra मौसम सलाह API चालू है 🚜"
@@ -158,10 +161,12 @@ def weather_advisory():
     if "error" in result:
         return jsonify(result), 500
 
-    return Response(json.dumps(result, ensure_ascii=False),content_type='application/json; charset=utf-8')
+    return Response(
+        json.dumps(result, ensure_ascii=False),
+        content_type='application/json; charset=utf-8'
+    )
 
 
 # 5. RUN SERVER
-
 if __name__ == '__main__':
     app.run(debug=True)
