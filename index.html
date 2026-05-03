@@ -144,7 +144,7 @@ async function getAdvisory() {
     resultDiv.style.display = "none";
 
     try {
-        const response = await fetch(`http://127.0.0.1:5000/weather_advisory?city=${city}`);
+        const response = await fetch(`https://krishimitra-szdo.onrender.com/weather_advisory?city=${city}`);
         const data = await response.json();
 
         if (data.error) {
