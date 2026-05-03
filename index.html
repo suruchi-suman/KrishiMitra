@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KrishiMitra 🌾</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f7f6;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 50px auto;
+            padding: 20px;
+            text-align: center;
+        }
+
+        h1 {
+            color: #2e7d32;
+            margin-bottom: 20px;
+        }
+
+        .search-box {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        input {
+            padding: 12px;
+            font-size: 16px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+            width: 100%;
+        }
+
+        button {
+            padding: 12px;
+            font-size: 16px;
+            background: #2e7d32;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1b5e20;
+        }
+
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0px 4px 12px rgba(0,0,0,0.1);
+            text-align: left;
+            display: none;
+        }
+
+        h3 {
+            margin-top: 15px;
+            color: #333;
+        }
+
+        p {
+            margin: 6px 0;
+        }
+
+        ul {
+            padding-left: 20px;
+        }
+
+        .error {
+            color: red;
+        }
+
+        .loading {
+            color: blue;
+        }
+
+        /* 📱 Mobile specific */
+        @media (max-width: 600px) {
+            .container {
+                margin: 20px;
+                padding: 15px;
+            }
+
+            h1 {
+                font-size: 22px;
+            }
+
+            input, button {
+                font-size: 14px;
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🌾 KrishiMitra Weather Advisory</h1>
+
+    <div class="search-box">
+        <input type="text" id="cityInput" placeholder="Enter city name">
+        <button onclick="getAdvisory()">Search</button>
+    </div>
+
+    <div id="status"></div>
+
+    <div class="result" id="result">
+        <h3>🌦 Weather</h3>
+        <p><b>Temperature:</b> <span id="temp"></span> °C</p>
+        <p><b>Humidity:</b> <span id="humidity"></span> %</p>
+        <p><b>Wind Speed:</b> <span id="wind"></span> m/s</p>
+        <p><b>Condition:</b> <span id="condition"></span></p>
+
+        <h3>⚠ Risks</h3>
+        <ul id="risks"></ul>
+
+        <h3>📢 Advisory</h3>
+        <p id="advisory"></p>
+    </div>
+</div>
+
+<script>
+async function getAdvisory() {
+    const city = document.getElementById("cityInput").value;
+    const statusDiv = document.getElementById("status");
+    const resultDiv = document.getElementById("result");
+
+    if (!city) {
+        statusDiv.innerHTML = "<p class='error'>Please enter a city</p>";
+        return;
+    }
+
+    statusDiv.innerHTML = "<p class='loading'>Loading...</p>";
+    resultDiv.style.display = "none";
+
+    try {
+        const response = await fetch(`http://127.0.0.1:5000/weather_advisory?city=${city}`);
+        const data = await response.json();
+
+        if (data.error) {
+            statusDiv.innerHTML = `<p class='error'>${data.error}</p>`;
+            return;
+        }
+
+        document.getElementById("temp").innerText = data.weather.temperature;
+        document.getElementById("humidity").innerText = data.weather.humidity;
+        document.getElementById("wind").innerText = data.weather.wind_speed;
+        document.getElementById("condition").innerText = data.weather.condition;
+
+        const risksList = document.getElementById("risks");
+        risksList.innerHTML = "";
+        data.risks.forEach(risk => {
+            const li = document.createElement("li");
+            li.innerText = risk;
+            risksList.appendChild(li);
+        });
+
+        document.getElementById("advisory").innerHTML = data.advisory;
+
+        statusDiv.innerHTML = "";
+        resultDiv.style.display = "block";
+
+    } catch (error) {
+        console.error(error);
+        statusDiv.innerHTML = "<p class='error'>Server error. Check backend.</p>";
+    }
+}
+</script>
+
+</body>
+</html>

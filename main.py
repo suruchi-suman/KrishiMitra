@@ -1,7 +1,9 @@
 from dotenv import load_dotenv
 import os
 import re
+from flask_cors import CORS
 
+ 
 load_dotenv()
 
 from google import genai
@@ -15,6 +17,7 @@ import json
 from flask import Response
 
 app = Flask(__name__)
+CORS(app)
 app.config['JSON_AS_ASCII'] = False
 
 API_KEY = os.getenv("WEATHER_API_KEY")
