@@ -64,9 +64,9 @@ https://krishimitra-szdo.onrender.com/weather_advisory?city=Jaipur
 
 ### 1. Clone Repository
 
-### 2. Install Dependencies - pip install -r requirements.txt
+### 2. Install Dependencies : pip install -r requirements.txt
 
-### 3. Run Backend - python main.py
+### 3. Run Backend : python main.py
 
 ### 4. Open Frontend
 Just open `index.html` in your browser
